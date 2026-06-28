@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shell Library Browser</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: #0b0b0f;
+            color: #e2e2e2;
+            padding: 2rem 1.5rem;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #a78bfa, #6366f1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+        .search-wrapper {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 2.5rem;
+        }
+        .search-bar {
+            width: 100%;
+            max-width: 450px;
+            padding: 0.9rem 1.2rem;
+            border: 1px solid #2a2a2e;
+            border-radius: 2rem;
+            background: #15151a;
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .search-bar:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1.75rem;
+        }
+        .card {
+            background: #1a1a1f;
+            border-radius: 1rem;
+            overflow: hidden;
+            transition: transform 0.25s, box-shadow 0.25s;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #2a2a30;
+            cursor: pointer;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.6);
+            border-color: #6366f1;
+        }
+        .card img {
+            width: 100%;
+            aspect-ratio: 2/3;
+            object-fit: cover;
+            background: #2a2a2e;
+        }
+        .card-body {
+            padding: 0.8rem 0.7rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            flex: 1;
+        }
+        .card-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            line-height: 1.3;
+            color: #fff;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-break: break-word;
+        }
+        .card-download {
+            display: inline-block;
+            background: #6366f1;
+            color: #fff;
+            text-align: center;
+            padding: 0.45rem 0.6rem;
+            border-radius: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: background 0.2s;
+            margin-top: auto;
+            border: none;
+            cursor: pointer;
+        }
+        .card-download:hover {
+            background: #818cf8;
+        }
+        .empty-message {
+            grid-column: 1 / -1;
+            text-align: center;
+            font-size: 1.3rem;
+            color: #666;
+            padding: 4rem 1rem;
+        }
+        .loader {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: center;
+            padding: 4rem 1rem;
+        }
+        .loader::after {
+            content: "";
+            width: 40px;
+            height: 40px;
+            border: 4px solid #2a2a2e;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        footer {
+            margin-top: 3rem;
+            text-align: center;
+            color: #555;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📦 Shell Library</h1>
+        <p class="subtitle">Browse pre‑assembled shells. Click a poster (or the button) to download the ZIP.</p>
+
+        <div class="search-wrapper">
+            <input type="text" class="search-bar" id="searchInput" placeholder="Search shells…" autocomplete="off">
+        </div>
+
+        <div class="grid" id="grid">
+            <div class="loader"></div>
+        </div>
+    </div>
+    <footer>Data sourced from <code>LibraryJS-Content-Shells</code> on GitHub</footer>
+
+    <script>
+    (function() {
+        // ---------- CONFIGURATION ----------
+        // Base URL of your repository's raw content
+        const BASE = "https://raw.githubusercontent.com/SirRawrz/LibraryJS-Content-Shells/main/";
+        const CATALOG_URL = BASE + "catalog.json";
+
+        // ---------- GLOBALS ----------
+        const grid = document.getElementById("grid");
+        const searchInput = document.getElementById("searchInput");
+        let shells = [];
+
+        // ---------- HELPER: Download the ZIP ----------
+        function downloadZip(shellName) {
+            const encoded = encodeURIComponent(shellName);
+            const zipUrl = `${BASE}shell/${encoded}/${encoded}-shell.zip`;
+            // Create an invisible anchor and click it
+            const a = document.createElement("a");
+            a.href = zipUrl;
+            a.download = `${shellName}-shell.zip`;  // suggested filename
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // ---------- RENDER ----------
+        function renderCards(filterText = "") {
+            const term = filterText.toLowerCase().trim();
+            const filtered = term 
+                ? shells.filter(s => s.name.toLowerCase().includes(term))
+                : shells;
+
+            grid.innerHTML = "";
+
+            if (!shells.length) {
+                // Not loaded yet (shouldn't happen if we call after fetch, but just in case)
+                grid.innerHTML = `<div class="loader"></div>`;
+                return;
+            }
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `<div class="empty-message">No shells found for “${term}”</div>`;
+                return;
+            }
+
+            filtered.forEach(shell => {
+                const encoded = encodeURIComponent(shell.name);
+                const posterUrl = `${BASE}shell/${encoded}/poster.jpg`;
+
+                const card = document.createElement("div");
+                card.className = "card";
+                card.title = `Click to download ${shell.name}`;
+
+                // Clicking the card (anywhere) triggers download
+                card.addEventListener("click", (e) => {
+                    // Don't trigger if the user clicked the download button (that has its own handler)
+                    // We'll use event delegation: if the click originated from the card itself (or img, etc.)
+                    downloadZip(shell.name);
+                });
+
+                card.innerHTML = `
+                    <img src="${posterUrl}" 
+                         alt="${shell.name}" 
+                         loading="lazy"
+                         onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22450%22%3E%3Crect fill=%22%232a2a2e%22 width=%22300%22 height=%22450%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23666%22 font-size=%2214%22%3ENo Poster%3C/text%3E%3C/svg%3E'">
+                    <div class="card-body">
+                        <div class="card-title">${shell.name}</div>
+                        <span class="card-download" onclick="event.stopPropagation(); downloadZip('${shell.name.replace(/'/g, "\\'")}');">⬇ Download</span>
+                    </div>
+                `;
+
+                grid.appendChild(card);
+            });
+        }
+
+        // ---------- FETCH CATALOG ----------
+        async function loadCatalog() {
+            try {
+                const response = await fetch(CATALOG_URL);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                // Ensure we have an array of objects with "name"
+                if (!Array.isArray(data)) throw new Error("Catalog is not an array");
+                shells = data.filter(item => item && typeof item.name === "string");
+                renderCards();
+            } catch (error) {
+                console.error("Failed to load catalog:", error);
+                grid.innerHTML = `
+                    <div class="empty-message">
+                        ❌ Could not load the catalog.<br>
+                        <small>Check that <code>catalog.json</code> exists at the root of the repository.</small><br>
+                        <small style="color:#888">${error.message}</small>
+                    </div>`;
+            }
+        }
+
+        // ---------- EVENT LISTENERS ----------
+        searchInput.addEventListener("input", () => {
+            renderCards(searchInput.value);
+        });
+
+        // ---------- START ----------
+        loadCatalog();
+    })();
+	// THIS IS JUST A STRAIGHT COPY OF ./browse.html from the hostedbyserverapp of the main LibraryJS repository
+    </script>
+</body>
+</html>
